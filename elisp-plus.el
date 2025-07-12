@@ -1,6 +1,6 @@
 ;;; elisp-plus.el --- Better Emacs Lisp code viewing  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024  Abdelhak Bougouffa
+;; Copyright (C) 2024-2025  Abdelhak Bougouffa
 ;; SPDX-License-Identifier: MIT
 
 ;; Author: Abdelhak Bougouffa <abougouffa@fedoraproject.org>
@@ -31,41 +31,42 @@
 (defvar elisp-plus-face nil)
 (defvar elisp-plus-calculate-lisp-indent-check-for-keyword nil)
 
-;; Extracted from:
+;; Adapted from:
 ;; github.com/doomemacs/doomemacs/blob/master/modules/lang/emacs-lisp/autoload.el
 (defun elisp-plus-highlight-vars-and-faces (end)
-  "Match defined variables and functions.
-Functions are differentiated into \"special forms\", \"built-in functions\" and
-\"library/userland functions\"."
+  "Match defined variables and functions until END.
+
+Use:
+ - `font-lock-variable-name-face' for variables.
+ - `font-lock-constant-face' for primitive functions.
+ - `font-lock-function-name-face' for regular functions."
   (catch 'matcher
     (while (re-search-forward "\\(?:\\sw\\|\\s_\\)+" end t)
       (let ((ppss (save-excursion (syntax-ppss))))
         (cond ((nth 3 ppss)  ; strings
                (search-forward "\"" end t))
               ((nth 4 ppss)  ; comments
-               (forward-line +1))
+               (forward-line 1))
               ((let ((symbol (intern-soft (match-string-no-properties 0))))
-                 (and (cond ((null symbol) nil)
-                            ((eq symbol t) nil)
-                            ((keywordp symbol) nil)
-                            ((special-variable-p symbol)
-                             (setq elisp-plus-face 'font-lock-variable-name-face))
-                            ((and (fboundp symbol)
-                                  (eq (char-before (match-beginning 0)) ?\()
-                                  (not (memq (char-before (1- (match-beginning 0)))
-                                             (list ?\' ?\`))))
-                             (let ((unaliased (indirect-function symbol)))
-                               (unless (or (macrop unaliased)
-                                           (special-form-p unaliased))
-                                 (let (unadvised)
-                                   (while (not (eq (setq unadvised (ad-get-orig-definition unaliased))
-                                                   (setq unaliased (indirect-function unadvised)))))
-                                   unaliased)
-                                 (setq elisp-plus-face
-                                       (if (subrp unaliased)
-                                           'font-lock-constant-face
-                                         'font-lock-function-name-face))))))
-                      (throw 'matcher t)))))))
+                 (when (cond ((null symbol) nil)
+                             ((eq symbol t) nil)
+                             ((and (fboundp symbol)
+                                   (eq (char-before (match-beginning 0)) ?\()
+                                   (not (memq (char-before (1- (match-beginning 0))) (list ?\' ?\`))))
+                              (let ((unaliased (indirect-function symbol)))
+                                (unless (or (macrop unaliased) (special-form-p unaliased))
+                                  (let (unadvised)
+                                    (while (not (eq (setq unadvised (ad-get-orig-definition unaliased))
+                                                    (setq unaliased (indirect-function unadvised)))))
+                                    unaliased)
+                                  (setq elisp-plus-face
+                                        (if (primitive-function-p unaliased)
+                                            'font-lock-constant-face
+                                          'font-lock-function-name-face)))))
+                             ((keywordp symbol) nil)
+                             ((special-variable-p symbol)
+                              (setq elisp-plus-face 'font-lock-variable-name-face)))
+                   (throw 'matcher t)))))))
     nil))
 
 ;; Taken from:
